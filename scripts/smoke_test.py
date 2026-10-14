@@ -137,7 +137,8 @@ def main():
         "/api/v1/retrieval/query/collection",
         json={"collection_names": [kb_id], "query": f"verification marker {marker}", "k": 5},
     )
-    if marker not in str(retrieved):
+    documents = retrieved.get("documents") or []
+    if not any(marker in document for group in documents for document in group if isinstance(document, str)):
         fail("Knowledge base retrieval did not return the uploaded document marker")
     print("Knowledge base retrieval: uploaded marker found", flush=True)
     print("Smoke test passed", flush=True)
