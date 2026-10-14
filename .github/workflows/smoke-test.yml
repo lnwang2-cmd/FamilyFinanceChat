@@ -1,0 +1,41 @@
+name: Open WebUI smoke test
+
+on:
+  push:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SMOKE_MODEL: gpt-4o-mini
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create isolated test configuration
+        run: |
+          cp .env.test.example .env.test
+          sed -i '/^WEBUI_SECRET_KEY=/d' .env.test
+          {
+            printf 'WEBUI_SECRET_KEY=%s\n' "$(openssl rand -hex 32)"
+          } >> .env.test
+          chmod 600 .env.test
+
+      - name: Start test stack
+        run: docker compose -f docker-compose.test.yml -f docker-compose.ci.yml up -d --build open-webui-test qdrant-test redis-test mock-openai-test
+
+      - name: Install smoke test dependency
+        run: python -m pip install requests==2.32.5
+
+      - name: Run API smoke test
+        run: python scripts/smoke_test.py --model "$SMOKE_MODEL"
+
+      - name: Show service state on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.test.yml -f docker-compose.ci.yml ps
+          docker compose -f docker-compose.test.yml -f docker-compose.ci.yml logs --tail=100 open-webui-test qdrant-test redis-test mock-openai-test
+
+      - name: Remove test stack
+        if: always()
+        run: docker compose -f docker-compose.test.yml -f docker-compose.ci.yml down -v --remove-orphans
